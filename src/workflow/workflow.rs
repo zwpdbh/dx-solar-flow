@@ -55,7 +55,7 @@ impl TryFrom<&str> for Workflow {
 }
 
 impl Workflow {
-    pub async fn load_from_path(workflow_path: String) -> Result<Workflow> {
+    pub fn load_from_path(workflow_path: String) -> Result<Workflow> {
         let path = Uri::for_test(&workflow_path);
 
         // Extract base directory for !include resolution
