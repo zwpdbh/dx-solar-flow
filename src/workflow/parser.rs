@@ -4,7 +4,6 @@ use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 use std::path::{Path, PathBuf};
 
-#[allow(unused)]
 pub fn expand_yaml_includes(yaml_content: &str, base_path: Option<&Path>) -> Result<String> {
     use regex::Regex;
 
