@@ -1,0 +1,39 @@
+[package]
+name = "dx-solar-flow"
+version = "0.1.0"
+authors = ["zwpdbh <hyperion_z@outlook.com>"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dioxus = { version = "0.7.1", features = ["router"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json"] }
+serde_yaml = "0.9.34"
+reqwest = { version = "~0.13", features = ["json"] }
+petgraph = { version = "0.8.3", features = ["serde"] }
+tokio = { version = "~1.49", features = ["full"] }
+uuid = { version = "1.19.0", features = [
+  "fast-rng",
+  "macro-diagnostics",
+  "serde",
+  "v4",
+  "rng-getrandom",
+] }
+regex = "1.12.2"
+jsonschema = "0.38.1"
+schemars = { version = "1.2", features = ["uuid1"] }
+home = "0.5.12"
+once_cell = "1.21.3"
+
+[features]
+default = ["desktop"]
+# The feature that are only required for the web = ["dioxus/web"] build target should be optional and only enabled in the web = ["dioxus/web"] feature
+web = ["dioxus/web"]
+# The feature that are only required for the desktop = ["dioxus/desktop"] build target should be optional and only enabled in the desktop = ["dioxus/desktop"] feature
+desktop = ["dioxus/desktop"]
+# The feature that are only required for the mobile = ["dioxus/mobile"] build target should be optional and only enabled in the mobile = ["dioxus/mobile"] feature
+mobile = ["dioxus/mobile"]
