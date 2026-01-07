@@ -119,14 +119,14 @@ impl EdgeHavePorts for SchemaEdgeType {
 }
 pub type GraphId = uuid::Uuid;
 
-pub struct DagSchemas {
+pub struct DagGraph {
     pub(crate) id: GraphId,
     graph: DiGraph<SchemaNodeType, SchemaEdgeType>,
     /// Lookup table for node indexes.
     node_lookup_table: HashMap<NodeId, NodeIndex>,
 }
 
-impl DagSchemas {
+impl DagGraph {
     pub fn from_graphs(
         entry_graph_id: GraphId,
         graphs: Vec<Graph>,
@@ -145,7 +145,7 @@ impl DagSchemas {
 
         let mut other_graph_schemas = HashMap::new();
         for (_, graph) in other_graphs.iter() {
-            let mut graph_schema = DagSchemas::from_graph(graph, &factories, &global_params);
+            let mut graph_schema = DagGraph::from_graph(graph, &factories, &global_params);
             let graph_nodes = graph_schema.collect_graph_nodes();
             for node in graph_nodes.iter() {
                 let Node::SubGraph {
@@ -172,7 +172,7 @@ impl DagSchemas {
                 } else {
                     global_params.clone()
                 };
-                let mut subgraph = DagSchemas::from_graph(subgraph, &factories, &params);
+                let mut subgraph = DagGraph::from_graph(subgraph, &factories, &params);
                 for edge in subgraph.graph.edge_weights_mut() {
                     edge.id = EdgeId::new(format!("{}.{}", entity.id, edge.id));
                 }
@@ -185,7 +185,7 @@ impl DagSchemas {
             }
             other_graph_schemas.insert(graph_schema.id, graph_schema);
         }
-        let mut entry_graph = DagSchemas::from_graph(entry_graph, &factories, &global_params);
+        let mut entry_graph = DagGraph::from_graph(entry_graph, &factories, &global_params);
         let graph_nodes = entry_graph.collect_graph_nodes();
         for node in graph_nodes.iter() {
             let Node::SubGraph {
@@ -345,7 +345,7 @@ impl DagSchemas {
         &mut self,
         node_id: NodeId,
         params: &Option<serde_json::Map<String, serde_json::Value>>,
-        subgraph: &DagSchemas,
+        subgraph: &DagGraph,
     ) {
         let Some(target_node) = self.node_index_by_node_id(node_id) else {
             return;
