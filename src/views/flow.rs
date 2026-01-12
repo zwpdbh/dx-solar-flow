@@ -1,3 +1,4 @@
+use crate::components::flow::Flow;
 use crate::workflow::Workflow;
 use dioxus::prelude::*;
 use std::{fs, path::Path};
@@ -7,7 +8,7 @@ pub fn FlowPage() -> Element {
     let mut workflow_file_path = use_signal(|| String::new());
     let mut file_info = use_signal(|| None::<Result<u64, String>>);
     let mut is_loading = use_signal(|| false);
-    let mut workflow = use_signal(|| None);
+    let mut workflow = use_signal::<Option<Workflow>>(|| None);
     let mut workflow_err = use_signal(|| None);
 
     rsx! {
@@ -60,6 +61,7 @@ pub fn FlowPage() -> Element {
                                             workflow_err.set(None); // Clear any previous error
                                         }
                                         Err(e) => {
+                                            println!("{}", e);
                                             workflow_err.set(Some(e));
                                         }
                                     }
@@ -112,6 +114,20 @@ pub fn FlowPage() -> Element {
                     }
                 }
 
+            }
+
+            // Render the Flow component if workflow is loaded successfully
+            {
+                if let Some(wf) = workflow.read().as_ref() {
+                    let workflow_signal = use_signal(move || wf.clone());
+                    rsx! {
+                        div { class: "mt-6 w-full h-[600px]",
+                            Flow { workflow: workflow_signal }
+                        }
+                    }
+                } else {
+                    rsx! {}
+                }
             }
 
         }

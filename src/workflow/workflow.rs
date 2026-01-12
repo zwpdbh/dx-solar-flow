@@ -35,12 +35,22 @@ pub struct NodeDefinition {
     pub with_params: Option<HashMap<String, serde_yaml::Value>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Workflow {
     pub id: String,
     pub name: String,
     pub entry_graph_id: Option<String>,
     pub graph: DiGraph<Node, Edge>,
+}
+
+impl PartialEq for Workflow {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id &&
+        self.name == other.name &&
+        self.entry_graph_id == other.entry_graph_id &&
+        self.graph.node_count() == other.graph.node_count() &&
+        self.graph.edge_count() == other.graph.edge_count()
+    }
 }
 
 impl Workflow {
