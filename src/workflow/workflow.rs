@@ -1,268 +1,74 @@
-#![allow(unused)]
-use super::node::Node;
-use super::uri::Uri;
-use crate::Result;
-use schemars::JsonSchema;
-use serde;
+use super::{Edge, Node};
+use crate::{Error, Result};
+use petgraph::graph::DiGraph;
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
-use serde_json::{Map, Value};
-use serde_yaml::Value as YamlValue;
-use std::env;
-use std::path::{Path, PathBuf};
-use uuid::Uuid;
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 
-pub type Id = Uuid;
-
-pub type Parameter = Map<String, Value>;
-
-#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Edge {
-    pub id: Id,
-    pub from: Id,
-    pub to: Id,
-    pub from_port: String,
-    pub to_port: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, JsonSchema)]
-pub struct Graph {
-    pub id: Id,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkflowDefinition {
+    pub id: String,
     pub name: String,
-    pub nodes: Vec<Node>,
-    pub edges: Vec<Edge>,
+    #[serde(rename = "entryGraphId")]
+    pub entry_graph_id: Option<String>,
+    #[serde(rename = "with")]
+    pub with_params: Option<HashMap<String, serde_yaml::Value>>,
+    pub graphs: Vec<GraphDefinition>,
 }
 
-#[derive(Serialize, Deserialize, Debug, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GraphDefinition {
+    pub id: String,
+    pub name: String,
+    pub nodes: Vec<NodeDefinition>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct NodeDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub node_type: String,
+    pub action: Option<String>,
+    #[serde(rename = "with")]
+    pub with_params: Option<HashMap<String, serde_yaml::Value>>,
+}
+
+#[derive(Debug)]
 pub struct Workflow {
-    pub id: Uuid,
+    pub id: String,
     pub name: String,
-    pub entry_graph_id: Id,
-    pub with: Option<Parameter>,
-    pub graphs: Vec<Graph>,
-}
-
-static ENVIRONMENT_PREFIX: &str = "FLOW_VAR_";
-
-impl TryFrom<&str> for Workflow {
-    type Error = crate::error::Error;
-
-    fn try_from(value: &str) -> Result<Self> {
-        let mut workflow: Self = from_str(value).map_err(crate::error::Error::input)?;
-        workflow.load_variables_from_environment()?;
-        Ok(workflow)
-    }
+    pub entry_graph_id: Option<String>,
+    pub graph: DiGraph<Node, Edge>,
 }
 
 impl Workflow {
-    pub fn load_from_path(workflow_path: String) -> Result<Workflow> {
-        let path = Uri::for_test(&workflow_path);
+    pub fn load_from_path(path: PathBuf) -> Result<Self> {
+        let yaml_content = fs::read_to_string(path)?;
+        let workflow_def: WorkflowDefinition = serde_yaml::from_str(&yaml_content)?;
 
-        // Extract base directory for !include resolution
-        let base_dir = path.path().parent().map(|p| p.to_path_buf());
-        let path_buf = path.as_path();
-        let yaml_content = std::fs::read_to_string(&path_buf).map_err(|e| {
-            crate::error::Error::Input(format!("Failed to read workflow file: {}", e))
-        })?;
-        let workflow_yaml = if let Some(base) = base_dir {
-            expand_yaml_includes(&yaml_content, Some(&base))?
-        } else {
-            expand_yaml_includes(&yaml_content, None)?
-        };
+        // Convert the workflow definition to our internal representation
+        let mut graph = DiGraph::new();
 
-        let workflow = Workflow::try_from(workflow_yaml.as_str())?;
-        Ok(workflow)
-    }
+        // Add all nodes from all graphs to the graph
+        for graph_def in workflow_def.graphs {
+            for node_def in graph_def.nodes {
+                let node = Node {
+                    id: node_def.id.clone(),
+                    name: node_def.name.clone(),
+                    subgraph: graph_def.id.clone(), // Assign the graph ID as the subgraph
+                };
 
-    fn load_variables_from_environment(&mut self) -> Result<()> {
-        let environment_vars: Vec<(String, String)> = env::vars()
-            .filter(|(key, _)| key.starts_with(ENVIRONMENT_PREFIX))
-            .map(|(key, value)| (key[ENVIRONMENT_PREFIX.len()..].to_string(), value))
-            .filter(|(key, _)| {
-                self.with
-                    .as_ref()
-                    .unwrap_or(&serde_json::Map::new())
-                    .contains_key(key)
-            })
-            .collect();
-        if environment_vars.is_empty() {
-            return Ok(());
-        }
-        let mut with = if let Some(with) = self.with.clone() {
-            with
-        } else {
-            serde_json::Map::<String, Value>::new()
-        };
-        with.extend(
-            environment_vars
-                .into_iter()
-                .map(|(key, value)| {
-                    tracing::info!("Loading environment variable: {}", key);
-                    let value = match determine_format(value.as_str()) {
-                        SerdeFormat::Json | SerdeFormat::Yaml => {
-                            from_str(value.as_str()).map_err(crate::error::Error::input)?
-                        }
-                        SerdeFormat::Unknown => {
-                            serde_json::to_value(value).map_err(crate::error::Error::input)?
-                        }
-                    };
-                    Ok((key, value))
-                })
-                .collect::<Result<Vec<_>>>()?,
-        );
-        self.with = Some(with);
-        Ok(())
-    }
-}
-
-pub fn expand_yaml_includes(yaml_content: &str, base_path: Option<&Path>) -> Result<String> {
-    use regex::Regex;
-
-    // Match patterns like: !include path/to/file.txt
-    let include_pattern = Regex::new(r"!include\s+([^\s\r\n]+)")
-        .map_err(|e| crate::Error::Serde(format!("Failed to create regex: {e}")))?;
-
-    let mut expanded = yaml_content.to_string();
-    let mut iterations = 0;
-    const MAX_ITERATIONS: usize = 10; // Prevent infinite loops
-
-    // Keep expanding until no more !include directives are found
-    while include_pattern.is_match(&expanded) && iterations < MAX_ITERATIONS {
-        iterations += 1;
-        let mut new_content = String::new();
-        let mut last_end = 0;
-
-        for cap in include_pattern.captures_iter(&expanded) {
-            let full_match = cap.get(0).unwrap();
-            let match_start = full_match.start();
-            let match_end = full_match.end();
-            let file_path_str = cap.get(1).unwrap().as_str();
-
-            // Add content before this match
-            new_content.push_str(&expanded[last_end..match_start]);
-
-            // Resolve the file path
-            let resolved_path = if let Some(base) = base_path {
-                let mut path = PathBuf::from(base);
-                path.push(file_path_str);
-                path
-            } else {
-                PathBuf::from(file_path_str)
-            };
-
-            // Read the included file
-            let included_content = std::fs::read_to_string(&resolved_path).map_err(|e| {
-                crate::Error::Serde(format!(
-                    "Failed to read included file {resolved_path:?}: {e}"
-                ))
-            })?;
-
-            // Find the indentation of the line containing !include
-            let line_start = expanded[..match_start]
-                .rfind('\n')
-                .map(|i| i + 1)
-                .unwrap_or(0);
-            let line_before_include = &expanded[line_start..match_start];
-            let base_indent = line_before_include
-                .chars()
-                .take_while(|c| c.is_whitespace())
-                .count();
-
-            // Determine if this is a scalar value context (key: !include) or object/array context (- !include)
-            let is_scalar_context = line_before_include.trim_start().contains(':');
-            let is_array_item = line_before_include.trim_start().starts_with('-');
-
-            let formatted_content = if is_scalar_context && !is_array_item {
-                // Scalar context: format as YAML literal block scalar
-                // The '|-' chomps the final newline, and content is indented relative to the key
-                format!(
-                    "|-\n{}",
-                    included_content
-                        .trim()
-                        .lines()
-                        .map(|line| format!("{}{}", " ".repeat(base_indent + 2), line))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                )
-            } else if is_array_item {
-                // Array item context (- !include): first line continues after dash, rest indented
-                let lines: Vec<&str> = included_content.trim().lines().collect();
-                if lines.is_empty() {
-                    String::new()
-                } else {
-                    let mut result = lines[0].to_string(); // First line: no extra indent
-                    for line in &lines[1..] {
-                        if line.trim().is_empty() {
-                            result.push('\n');
-                        } else {
-                            // Subsequent lines: indent to align with first line content (base + 2 for "- ")
-                            result.push_str(&format!("\n{}{}", " ".repeat(base_indent + 2), line));
-                        }
-                    }
-                    result
-                }
-            } else {
-                // Object context: insert raw YAML with proper indentation
-                included_content
-                    .trim()
-                    .lines()
-                    .map(|line| {
-                        if line.trim().is_empty() {
-                            String::new()
-                        } else {
-                            format!("{}{}", " ".repeat(base_indent), line)
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            };
-
-            new_content.push_str(&formatted_content);
-            last_end = match_end;
+                graph.add_node(node);
+            }
         }
 
-        // Add remaining content after last match
-        new_content.push_str(&expanded[last_end..]);
-        expanded = new_content;
-    }
-
-    if iterations >= MAX_ITERATIONS {
-        panic!("Maximum include expansion iterations reached");
-    }
-
-    Ok(expanded)
-}
-
-pub enum SerdeFormat {
-    Json,
-    Yaml,
-    Unknown,
-}
-
-pub fn determine_format(input: &str) -> SerdeFormat {
-    if serde_json::from_str::<JsonValue>(input).is_ok() {
-        SerdeFormat::Json
-    } else if serde_yaml::from_str::<YamlValue>(input).is_ok() {
-        SerdeFormat::Yaml
-    } else {
-        SerdeFormat::Unknown
-    }
-}
-
-pub fn from_str<'a, T>(s: &'a str) -> crate::Result<T>
-where
-    T: serde::Deserialize<'a>,
-{
-    let format = determine_format(s);
-    match format {
-        SerdeFormat::Json => {
-            serde_json::from_str(s).map_err(|e| crate::Error::Serde(format!("{e}")))
-        }
-        SerdeFormat::Yaml => {
-            serde_yaml::from_str(s).map_err(|e| crate::Error::Serde(format!("{e}")))
-        }
-        SerdeFormat::Unknown => Err(crate::Error::Serde("Unknown format".to_string())),
+        Ok(Workflow {
+            id: workflow_def.id,
+            name: workflow_def.name,
+            entry_graph_id: workflow_def.entry_graph_id,
+            graph,
+        })
     }
 }

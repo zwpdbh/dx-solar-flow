@@ -1,6 +1,5 @@
 mod error;
 mod workflow;
-
 pub use error::{Error, Result};
 // The dioxus prelude contains a ton of common items used in dioxus apps. It's a good idea to import wherever you
 // need dioxus

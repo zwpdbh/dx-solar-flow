@@ -1,8 +1,10 @@
 #![allow(unused)]
-pub mod dag_graph;
 mod edge;
 mod node;
-mod uri;
 mod workflow;
+#[cfg(test)]
+mod tests;
 
+pub use edge::Edge;
+pub use node::Node;
 pub use workflow::Workflow;

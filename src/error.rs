@@ -17,8 +17,14 @@ impl core::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl Error {
-    pub fn input<T: ToString>(msg: T) -> Self {
-        Error::Input(format!("Input Error: {}", msg.to_string()))
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Self::Input(value.to_string())
+    }
+}
+
+impl From<serde_yaml::Error> for Error {
+    fn from(value: serde_yaml::Error) -> Self {
+        Self::Serde(value.to_string())
     }
 }
