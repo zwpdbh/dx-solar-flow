@@ -15,7 +15,7 @@ pub fn FlowPage() -> Element {
         div { class: "container mx-auto p-4",
             h1 { class: "text-2xl font-bold mb-4", "workflow loader" }
             p {
-                "/home/zw/code/rust_programming/reearth-flow/engine/runtime/examples/fixture/workflow/solar-radiation/solar-potential/workflow.yaml"
+                "/home/zw/code/rust_programming/dx-solar-flow/documents/solar-radiation/calculate-cloud-correction/workflow.yaml"
             }
 
             // Render workflow error if it exists
