@@ -267,3 +267,10 @@ fn parse_graph_element(input: &str) -> IResult<&str, GraphDef> {
 - Nom examples: Look for YAML/JSON parser examples in the Nom repository
 - Practice: Start with simple grammars and gradually increase complexity
 
+
+
+## References 
+
+- [Parse and Generate YAML with Rust](https://mojoauth.com/parse-and-generate-formats/parse-and-generate-yaml-with-rust/#handling-dynamic-or-unknown-yaml-structures)
+- [Learning Parser Combinators With Rust](https://bodil.lol/parser-combinators/)
+- [https://iximiuz.com/en/posts/rust-writing-parsers-with-nom/](https://iximiuz.com/en/posts/rust-writing-parsers-with-nom/)

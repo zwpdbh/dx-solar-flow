@@ -22,9 +22,3 @@ impl From<std::io::Error> for Error {
         Self::Input(value.to_string())
     }
 }
-
-impl From<serde_yaml::Error> for Error {
-    fn from(value: serde_yaml::Error) -> Self {
-        Self::Serde(value.to_string())
-    }
-}
