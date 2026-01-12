@@ -9,6 +9,7 @@ pub fn Edge(
     edge_idx: petgraph::graph::EdgeIndex,
     on_click: EventHandler<petgraph::graph::EdgeIndex>,
     is_selected: bool,
+    edge_label: Option<String>,
 ) -> Element {
     // Calculate direction vector for arrow
     let dx = target_pos.x - source_pos.x;
@@ -93,14 +94,32 @@ pub fn Edge(
                 cursor: "pointer",
                 onclick: handle_edge_click,
             }
-            // Edge weight label
-            text {
-                x: "{(start_x + end_x) / 2.0 + 10.0}",
-                y: "{(start_y + end_y) / 2.0 - 10.0}",
-                fill: "red",
-                font_size: "12",
-                font_weight: "bold",
-                "{weight}"
+            // Edge label (display the edge name if provided, otherwise show weight)
+            {
+                if let Some(label) = edge_label {
+                    rsx! {
+                        text {
+                            x: "{(start_x + end_x) / 2.0 + 10.0}",
+                            y: "{(start_y + end_y) / 2.0 - 10.0}",
+                            fill: "red",
+                            font_size: "12",
+                            font_weight: "bold",
+                            "{label}"
+                        }
+                    }
+                } else {
+                    // Fallback to weight if no label is provided
+                    rsx! {
+                        text {
+                            x: "{(start_x + end_x) / 2.0 + 10.0}",
+                            y: "{(start_y + end_y) / 2.0 - 10.0}",
+                            fill: "red",
+                            font_size: "12",
+                            font_weight: "bold",
+                            "{weight}"
+                        }
+                    }
+                }
             }
         }
     }

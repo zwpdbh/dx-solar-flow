@@ -1,4 +1,4 @@
-use crate::components::flow::Flow;
+use crate::components::graph::Graph;
 use crate::workflow::Workflow;
 use dioxus::prelude::*;
 use std::{fs, path::Path};
@@ -116,13 +116,13 @@ pub fn FlowPage() -> Element {
 
             }
 
-            // Render the Flow component if workflow is loaded successfully
+            // Render the Graph component if workflow is loaded successfully
             {
                 if let Some(wf) = workflow.read().as_ref() {
-                    let workflow_signal = use_signal(move || wf.clone());
+                    let workflow_signal = use_signal(move || wf.graph.clone());
                     rsx! {
                         div { class: "mt-6 w-full h-[600px]",
-                            Flow { workflow: workflow_signal }
+                            Graph { graph: workflow_signal }
                         }
                     }
                 } else {

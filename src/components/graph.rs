@@ -1,7 +1,8 @@
-use crate::components::{Edge, Node};
+use crate::components::{Edge as GraphEdge, Node as GraphNode};
 use dioxus::prelude::*;
-use petgraph::Graph as PetGraph;
+use petgraph::graph::DiGraph;
 use std::collections::HashMap;
+use std::fmt::Display;
 
 #[derive(PartialEq, Clone)]
 pub struct Point {
@@ -19,9 +20,9 @@ pub enum EditingMode {
 }
 
 #[derive(PartialEq, Clone)]
-pub enum Selection {
-    Node(petgraph::graph::NodeIndex),
-    Edge(petgraph::graph::EdgeIndex),
+pub enum Selection<N, E> {
+    Node((petgraph::graph::NodeIndex, N)),
+    Edge((petgraph::graph::EdgeIndex, E)),
     None,
 }
 
@@ -32,10 +33,14 @@ pub enum Tab {
 }
 
 #[component]
-pub fn Graph(
-    mut graph: Signal<PetGraph<String, i32>>,
+pub fn Graph<N, E>(
+    mut graph: Signal<DiGraph<N, E>>,
     initial_positions: Option<Signal<HashMap<petgraph::graph::NodeIndex, Point>>>,
-) -> Element {
+) -> Element
+where
+    N: Clone + Display + Default + 'static,
+    E: Clone + Display + Default + 'static,
+{
     // Store node positions in a signal for dragging, using provided positions or default layout
     let mut node_positions = use_signal(move || {
         let graph_ref = graph.read();
@@ -74,7 +79,7 @@ pub fn Graph(
     let mut selected_nodes = use_signal(|| Vec::<petgraph::graph::NodeIndex>::new());
 
     // Track current selection (for properties panel)
-    let mut current_selection = use_signal(|| Selection::None);
+    let mut current_selection = use_signal(|| Selection::<N, E>::None);
 
     // Track current active tab
     let mut active_tab = use_signal(|| Tab::Node);
@@ -102,7 +107,10 @@ pub fn Graph(
         match *editing_mode.read() {
             EditingMode::Normal => {
                 // Select the node for properties panel
-                *current_selection.write() = Selection::Node(node_idx);
+                let graph_ref = graph.read();
+                if let Some(node_data) = graph_ref.node_weight(node_idx) {
+                    *current_selection.write() = Selection::Node((node_idx, node_data.clone()));
+                }
             }
             EditingMode::AddEdge => {
                 // Add node to selection for edge creation
@@ -116,8 +124,8 @@ pub fn Graph(
                     let source = nodes[0];
                     let target = nodes[1];
 
-                    // Add edge to the graph
-                    graph.write().add_edge(source, target, 1); // Default weight of 1
+                    // Add edge to the graph with a default value
+                    graph.write().add_edge(source, target, E::default());
 
                     // Clear selection
                     nodes.clear();
@@ -149,8 +157,8 @@ pub fn Graph(
             let x = rect.x as f64;
             let y = rect.y as f64;
 
-            // Add a new node to the graph
-            let new_node_idx = graph.write().add_node("New Node".to_string());
+            // Add a new node to the graph with a default value
+            let new_node_idx = graph.write().add_node(N::default());
 
             // Add the new node's position
             node_positions.write().insert(new_node_idx, Point { x, y });
@@ -161,7 +169,10 @@ pub fn Graph(
         match *editing_mode.read() {
             EditingMode::Normal => {
                 // Select the edge for properties panel
-                *current_selection.write() = Selection::Edge(edge_idx);
+                let graph_ref = graph.read();
+                if let Some(edge_data) = graph_ref.edge_weight(edge_idx) {
+                    *current_selection.write() = Selection::Edge((edge_idx, edge_data.clone()));
+                }
             }
             EditingMode::AddEdge => {
                 // Do nothing in add edge mode
@@ -217,22 +228,12 @@ pub fn Graph(
 
     // Get the current selection info for display
     let selection_info = match &*current_selection.read() {
-        Selection::Node(node_idx) => {
-            let graph_ref = graph.read();
-            if let Some(node_data) = graph_ref.node_weight(*node_idx) {
-                format!("Selected Node: {}", node_data)
-            } else {
-                "Selected Node: (unknown)".to_string()
-            }
-        },
-        Selection::Edge(edge_idx) => {
-            let graph_ref = graph.read();
-            if let Some(edge_data) = graph_ref.edge_weight(*edge_idx) {
-                format!("Selected Edge: Weight {}", edge_data)
-            } else {
-                "Selected Edge: (unknown)".to_string()
-            }
-        },
+        Selection::Node((node_idx, node_data)) => {
+            format!("Selected Node: {}", node_data)
+        }
+        Selection::Edge((edge_idx, edge_data)) => {
+            format!("Selected Edge: {}", edge_data)
+        }
         Selection::None => "No selection".to_string(),
     };
 
@@ -241,7 +242,7 @@ pub fn Graph(
             div { class: "p-4 bg-gray-100",
                 h2 { class: "text-xl font-bold", "Directional Graph Visualization" }
                 div { class: "mt-2 text-sm text-gray-600",
-                    "Node type: String, Edge type: Integer. Drag nodes to reposition them."
+                    "Generic graph visualization. Drag nodes to reposition them."
                 }
 
                 // Tab navigation
@@ -253,11 +254,7 @@ pub fn Graph(
                             "py-2 px-4 font-medium text-sm text-gray-500 hover:text-gray-700"
                         };
                         rsx! {
-                            button {
-                                class: "{tab_class}",
-                                onclick: switch_to_node_tab,
-                                "Nodes"
-                            }
+                            button { class: "{tab_class}", onclick: switch_to_node_tab, "Nodes" }
                         }
                     }
                     {
@@ -267,11 +264,7 @@ pub fn Graph(
                             "py-2 px-4 font-medium text-sm text-gray-500 hover:text-gray-700"
                         };
                         rsx! {
-                            button {
-                                class: "{tab_class}",
-                                onclick: switch_to_edge_tab,
-                                "Edges"
-                            }
+                            button { class: "{tab_class}", onclick: switch_to_edge_tab, "Edges" }
                         }
                     }
                 }
@@ -287,11 +280,7 @@ pub fn Graph(
                                 "px-3 py-1 rounded text-sm bg-gray-200"
                             };
                             rsx! {
-                                button {
-                                    class: "{btn_class}",
-                                    onclick: set_normal_mode,
-                                    "Normal"
-                                }
+                                button { class: "{btn_class}", onclick: set_normal_mode, "Normal" }
                             }
                         }
                         {
@@ -301,11 +290,7 @@ pub fn Graph(
                                 "px-3 py-1 rounded text-sm bg-gray-200"
                             };
                             rsx! {
-                                button {
-                                    class: "{btn_class}",
-                                    onclick: set_add_node_mode,
-                                    "Add Node"
-                                }
+                                button { class: "{btn_class}", onclick: set_add_node_mode, "Add Node" }
                             }
                         }
                         {
@@ -315,11 +300,7 @@ pub fn Graph(
                                 "px-3 py-1 rounded text-sm bg-gray-200"
                             };
                             rsx! {
-                                button {
-                                    class: "{btn_class}",
-                                    onclick: set_delete_node_mode,
-                                    "Delete Node"
-                                }
+                                button { class: "{btn_class}", onclick: set_delete_node_mode, "Delete Node" }
                             }
                         }
                     }
@@ -333,11 +314,7 @@ pub fn Graph(
                                 "px-3 py-1 rounded text-sm bg-gray-200"
                             };
                             rsx! {
-                                button {
-                                    class: "{btn_class}",
-                                    onclick: set_normal_mode,
-                                    "Normal"
-                                }
+                                button { class: "{btn_class}", onclick: set_normal_mode, "Normal" }
                             }
                         }
                         {
@@ -347,11 +324,7 @@ pub fn Graph(
                                 "px-3 py-1 rounded text-sm bg-gray-200"
                             };
                             rsx! {
-                                button {
-                                    class: "{btn_class}",
-                                    onclick: set_add_edge_mode,
-                                    "Add Edge"
-                                }
+                                button { class: "{btn_class}", onclick: set_add_edge_mode, "Add Edge" }
                             }
                         }
                         {
@@ -361,11 +334,7 @@ pub fn Graph(
                                 "px-3 py-1 rounded text-sm bg-gray-200"
                             };
                             rsx! {
-                                button {
-                                    class: "{btn_class}",
-                                    onclick: set_delete_edge_mode,
-                                    "Delete Edge"
-                                }
+                                button { class: "{btn_class}", onclick: set_delete_edge_mode, "Delete Edge" }
                             }
                         }
                     }
@@ -381,9 +350,7 @@ pub fn Graph(
                         EditingMode::DeleteNode => "Delete Node",
                     };
                     rsx! {
-                        div { class: "mt-2 text-sm",
-                            "Mode: {mode_text} | {selection_info}"
-                        }
+                        div { class: "mt-2 text-sm", "Mode: {mode_text} | {selection_info}" }
                     }
                 }
                 // Selected nodes for edge creation
@@ -410,16 +377,21 @@ pub fn Graph(
                             let target_pos = positions_ref.get(&target);
 
                             if let (Some(source_pos), Some(target_pos)) = (source_pos, target_pos) {
-                                let weight = graph_ref[edge_idx];
+                                let edge_data = graph_ref[edge_idx].clone();
                                 rsx! {
-                                    Edge {
+                                    GraphEdge {
                                         key: "{edge_idx.index()}",
                                         source_pos: source_pos.clone(),
                                         target_pos: target_pos.clone(),
-                                        weight,
+                                        weight: 1, // Default weight for visualization
                                         edge_idx,
                                         on_click: handle_edge_click,
-                                        is_selected: matches!(*current_selection.read(), Selection::Edge(selected_idx) if selected_idx == edge_idx),
+                                        is_selected: matches!(
+                                            *current_selection.read(),
+                                            Selection::Edge((selected_idx, _))
+                                            if selected_idx == edge_idx
+                                        ),
+                                        edge_label: Some(edge_data.to_string()),
                                     }
                                 }
                             } else {
@@ -436,16 +408,20 @@ pub fn Graph(
                             let graph_ref = graph.read();
                             let positions_ref = node_positions.read();
                             if let Some(position) = positions_ref.get(&node_idx) {
-                                let node_label = graph_ref[node_idx].clone();
+                                let node_data = graph_ref[node_idx].clone();
                                 rsx! {
-                                    Node {
+                                    GraphNode {
                                         key: "{node_idx.index()}",
                                         position: position.clone(),
-                                        label: node_label,
+                                        label: node_data.to_string(),
                                         node_idx,
                                         on_drag_start: handle_drag_start,
                                         on_click: handle_node_click,
-                                        is_selected: matches!(*current_selection.read(), Selection::Node(selected_idx) if selected_idx == node_idx),
+                                        is_selected: matches!(
+                                            *current_selection.read(),
+                                            Selection::Node((selected_idx, _))
+                                            if selected_idx == node_idx
+                                        ),
                                     }
                                 }
                             } else {
@@ -458,7 +434,7 @@ pub fn Graph(
                 }
             }
             div { class: "p-4 text-sm text-gray-600",
-                "Directed graph with string nodes and integer edges. Drag nodes to reposition them. Use tabs to switch between node and edge operations."
+                "Generic directed graph visualization. Drag nodes to reposition them. Use tabs to switch between node and edge operations."
             }
         }
     }
