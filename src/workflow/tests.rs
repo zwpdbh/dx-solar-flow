@@ -163,4 +163,28 @@ mod tests {
             csv_reader_found, rename_attributes_found, prepare_extra_attr_found
         );
     }
+
+    #[test]
+    fn test_parse_complex_workflow_yaml_structure() {
+        // Test that the workflow contains expected nodes from the YAML
+        let current_dir = std::env::current_dir().expect("Failed to get current directory");
+        let workflow_path = current_dir
+            .join("documents")
+            .join("solar-radiation")
+            .join("solar-potential")
+            .join("workflow.yaml");
+
+        if !workflow_path.exists() {
+            panic!("Workflow YAML file not found at {:?}", workflow_path);
+        }
+
+        let result = Workflow::load_from_path(workflow_path);
+        assert!(
+            result.is_ok(),
+            "Failed to parse workflow YAML: {:?}",
+            result.err()
+        );
+
+        let workflow = result.unwrap();
+    }
 }
