@@ -1,11 +1,15 @@
 mod error;
+mod mytracer;
 mod workflow;
+
 pub use error::{Error, Result};
 // The dioxus prelude contains a ton of common items used in dioxus apps. It's a good idea to import wherever you
 // need dioxus
 use dioxus::prelude::*;
 
 use views::{Blog, FlowPage, GraphPage, Home, Navbar};
+
+use crate::mytracer::setup_simple_tracing;
 
 /// Define a components module that contains all shared components for our app.
 mod components;
@@ -49,6 +53,7 @@ const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
 fn main() {
+    setup_simple_tracing();
     // The `launch` function is the main entry point for a dioxus app. It takes a component and renders it with the platform feature
     // you have enabled
     dioxus::launch(App);
