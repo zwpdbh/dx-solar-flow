@@ -92,9 +92,11 @@ pub fn FlowPage() -> Element {
                     match result {
                         Ok(size) => {
                             // Show success message if workflow loaded successfully
-                            if workflow.read().is_some() {
+                            if let Some(wf) = workflow.read().as_ref() {
+                                let node_count = wf.graph.node_count();
+                                let edge_count = wf.graph.edge_count();
                                 rsx! {
-                                    div { class: "text-green-600", "Workflow loaded successfully" }
+                                    div { class: "text-green-600", "Workflow loaded successfully: {node_count} nodes, {edge_count} edges" }
                                 }
                             } else {
                                 rsx! {
